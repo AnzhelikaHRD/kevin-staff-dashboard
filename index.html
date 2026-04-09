@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KEVIN — Штатний графік</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design tokens ─────────────────────────────────────────── */
+:root {
+  --yellow:       #FFD300;
+  --yellow-mid:   #FFC800;
+  --yellow-glow:  rgba(255, 211, 0, 0.28);
+  --yellow-soft:  rgba(255, 211, 0, 0.10);
+  --teal:         #4ECDC4;
+  --teal-soft:    rgba(78, 205, 196, 0.12);
+  --dark:         #1A1A2E;
+  --dark2:        #2D2D4E;
+  --bg:           #F0F2F8;
+  --card:         #FFFFFF;
+  --border:       #E4E8F0;
+  --border-soft:  rgba(0,0,0,0.06);
+  --text:         #1A1A2E;
+  --muted:        #8892A4;
+
+  --s-work:       #22C55E;
+  --s-dayoff:     #C8D0DE;
+  --s-vacation:   #60A5FA;
+  --s-sick:       #FBBF24;
+  --s-probation:  var(--yellow);
+  --s-fired:      #F87171;
+  --s-oncall:     #FB923C;
+  --s-null:       #EEF1F8;
+
+  --radius:       20px;
+  --radius-sm:    12px;
+  --radius-pill:  40px;
+
+  --shadow:       0 2px 8px rgba(26,26,46,.05), 0 8px 24px rgba(26,26,46,.06);
+  --shadow-hover: 0 4px 16px rgba(26,26,46,.10), 0 0 0 1px rgba(255,211,0,.15);
+  --glow-sm:      0 0 20px rgba(255,211,0,.20);
+  --glow-md:      0 0 40px rgba(255,211,0,.30), 0 0 80px rgba(255,211,0,.10);
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+html { font-size: 14px; }
+body {
+  font-family: 'Montserrat', -apple-system, sans-serif;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, rgba(148,163,184,.45) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Ambient glow blobs */
+body::before, body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+body::before {
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(255,211,0,.07) 0%, transparent 65%);
+  top: -200px; right: -150px;
+}
+body::after {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(78,205,196,.06) 0%, transparent 65%);
+  bottom: -100px; left: -100px;
+}
+
+.app-wrapper { max-width: 1440px; margin: 0 auto; padding: 0 24px 48px; position: relative; z-index: 1; }
+
+/* ── Header ────────────────────────────────────────────────── */
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0 16px; gap: 16px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.header-brand { display: flex; align-items: center; gap: 14px; }
+.brand-logo {
+  width: 44px; height: 44px; border-radius: 14px;
+  background: var(--dark);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 1px rgba(255,211,0,.3), var(--glow-sm);
+  flex-shrink: 0;
+}
+.brand-logo svg { width: 26px; height: 26px; }
+.brand-name { font-size: 22px; font-weight: 800; color: var(--dark); letter-spacing: -.5px; }
+.brand-tag  { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+/* Refresh badge */
+.refresh-badge {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); padding: 6px 14px 6px 10px;
+  font-size: 12px; font-weight: 500; color: var(--muted);
+  box-shadow: var(--shadow);
+}
+.refresh-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--s-work); flex-shrink: 0;
+  animation: dotpulse 2s ease-in-out infinite;
+}
+.refresh-dot.loading { background: var(--yellow); animation: dotpulse .6s ease-in-out infinite; }
+@keyframes dotpulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+
+.countdown-wrap { display: flex; align-items: center; gap: 8px; }
+.refresh-track { width: 80px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.refresh-fill  { height: 100%; background: var(--teal); border-radius: 2px; transition: width 1s linear; }
+
+.last-updated { font-size: 12px; font-weight: 500; color: var(--muted); }
+
+/* ── Error ─────────────────────────────────────────────────── */
+.error-bar {
+  background: #FEF2F2; border: 1px solid #FECACA;
+  border-radius: var(--radius-sm); padding: 12px 18px;
+  color: #991B1B; font-size: 12px; font-weight: 500;
+  margin-bottom: 16px; display: none;
+}
+.error-bar.show { display: block; }
+
+/* ── Control panel ─────────────────────────────────────────── */
+.control-panel {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 22px;
+}
+.dept-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.tab-btn {
+  padding: 8px 18px; border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border);
+  background: var(--card); color: var(--muted);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .18s;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+.tab-btn:hover { border-color: var(--yellow); color: var(--dark); box-shadow: var(--glow-sm); }
+.tab-btn.active {
+  background: var(--dark); color: var(--yellow);
+  border-color: var(--dark);
+  box-shadow: var(--shadow), 0 0 0 2px rgba(255,211,0,.2);
+}
+
+.period-group {
+  display: flex; align-items: center;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: var(--radius-pill); padding: 3px;
+  box-shadow: var(--shadow);
+}
+.period-btn {
+  padding: 6px 16px; border-radius: var(--radius-pill); border: none;
+  background: transparent; color: var(--muted);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .18s;
+}
+.period-btn:hover { color: var(--dark); }
+.period-btn.active {
+  background: var(--yellow); color: var(--dark);
+  box-shadow: var(--glow-sm);
+}
+
+/* ── KPI Grid ──────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px; margin-bottom: 20px;
+}
+
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px 18px;
+  box-shadow: var(--shadow);
+  transition: box-shadow .2s, transform .2s;
+  position: relative; overflow: hidden;
+  cursor: default;
+}
+.kpi-card:hover { box-shadow: var(--shadow-hover), var(--glow-sm); transform: translateY(-2px); }
+
+/* Accent bar at top */
+.kpi-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--kpi-bar, var(--border));
+}
+/* Corner glow */
+.kpi-card::after {
+  content: '';
+  position: absolute; top: -40px; right: -40px;
+  width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, var(--kpi-glow, transparent) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.kpi-card.c-total    { --kpi-bar: var(--dark);     --kpi-glow: rgba(26,26,46,.05); }
+.kpi-card.c-working  { --kpi-bar: var(--s-work);   --kpi-glow: rgba(34,197,94,.08); }
+.kpi-card.c-vacation { --kpi-bar: var(--s-vacation);--kpi-glow: rgba(96,165,250,.08); }
+.kpi-card.c-sick     { --kpi-bar: var(--s-sick);   --kpi-glow: rgba(251,191,36,.08); }
+.kpi-card.c-probation{ --kpi-bar: var(--yellow);   --kpi-glow: rgba(255,211,0,.12); }
+
+/* Featured total card */
+.kpi-card.featured {
+  background: var(--dark);
+  border-color: transparent;
+  box-shadow: var(--shadow), var(--glow-sm);
+}
+.kpi-card.featured::before { background: var(--yellow); }
+.kpi-card.featured .kpi-icon  { color: rgba(255,255,255,.5); }
+.kpi-card.featured .kpi-value { color: var(--yellow); }
+.kpi-card.featured .kpi-label { color: rgba(255,255,255,.5); }
+.kpi-card.featured .kpi-sub   { color: rgba(255,255,255,.35); }
+.kpi-card.featured:hover { box-shadow: var(--shadow), var(--glow-md); }
+
+.kpi-icon  { font-size: 20px; margin-bottom: 12px; color: var(--muted); }
+.kpi-value {
+  font-size: 38px; font-weight: 800; line-height: 1;
+  color: var(--dark); letter-spacing: -1px;
+}
+.kpi-value.loading {
+  display: inline-block; width: 70px; height: 38px;
+  background: linear-gradient(90deg,#eee 25%,#f5f5f5 50%,#eee 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite; border-radius: 8px; color: transparent;
+}
+@keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+.kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-top: 6px; }
+.kpi-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── Chart ─────────────────────────────────────────────────── */
+.chart-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 22px 26px 18px; margin-bottom: 20px;
+  position: relative; overflow: hidden;
+}
+.chart-card::before {
+  content: '';
+  position: absolute; bottom: -60px; right: -60px;
+  width: 260px; height: 260px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,211,0,.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.card-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 18px; gap: 12px; flex-wrap: wrap;
+}
+.card-title  { font-size: 15px; font-weight: 700; color: var(--dark); }
+.card-sub    { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 500; }
+.chart-legend {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+}
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.chart-wrap { position: relative; height: 230px; }
+#mainChart  { width: 100% !important; height: 100% !important; }
+
+/* ── Table card ────────────────────────────────────────────── */
+.table-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.table-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+
+.search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 280px; }
+.search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; }
+.search-input {
+  width: 100%; padding: 8px 12px 8px 34px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); font-family: 'Montserrat', sans-serif;
+  font-size: 12px; font-weight: 500; color: var(--dark);
+  outline: none; transition: border-color .18s, box-shadow .18s;
+}
+.search-input:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px var(--yellow-soft); }
+.search-input::placeholder { color: var(--muted); }
+
+.filter-select {
+  padding: 8px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); font-family: 'Montserrat', sans-serif;
+  font-size: 12px; font-weight: 500; color: var(--dark);
+  cursor: pointer; outline: none; transition: border-color .18s;
+}
+.filter-select:focus { border-color: var(--yellow); }
+
+.row-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+
+.table-scroll { overflow-x: auto; overflow-y: auto; max-height: 560px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: #F8F9FC; padding: 10px 14px;
+  text-align: left; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+thead th.d-col {
+  padding: 6px 2px; text-align: center; min-width: 18px; font-size: 9.5px;
+}
+thead th.d-we  { color: #F87171; }
+thead th.d-today { color: var(--yellow-mid); font-weight: 800; }
+
+tbody tr { border-bottom: 1px solid rgba(0,0,0,.04); transition: background .12s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #FAFBFF; }
+tbody tr.g-header { background: #F8F9FC; }
+tbody tr.g-header td {
+  font-size: 11px; font-weight: 700; color: var(--dark);
+  text-transform: uppercase; letter-spacing: .5px;
+  padding: 8px 14px 6px;
+}
+tbody td { padding: 10px 14px; vertical-align: middle; color: var(--dark); }
+.n-col { color: var(--muted); font-size: 11px; font-weight: 500; }
+.emp-name { font-weight: 700; font-size: 13px; }
+.emp-sub  { font-size: 10px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+
+/* Probation badge inline */
+.badge-probation-inline {
+  display: inline-flex; align-items: center;
+  background: var(--yellow); color: var(--dark);
+  font-size: 9px; font-weight: 800; padding: 2px 7px;
+  border-radius: 10px; margin-left: 6px;
+  text-transform: uppercase; letter-spacing: .3px;
+  box-shadow: 0 0 8px rgba(255,211,0,.4);
+  vertical-align: middle;
+}
+
+/* Status badges */
+.sbadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 10px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.sb-work      { background:#DCFCE7; color:#15803D; }
+.sb-dayoff    { background:#F1F5F9; color:#64748B; }
+.sb-vacation  { background:#DBEAFE; color:#1D4ED8; }
+.sb-sick      { background:#FEF9C3; color:#854D0E; }
+.sb-probation { background:var(--yellow); color:var(--dark); box-shadow:0 0 8px rgba(255,211,0,.35); }
+.sb-fired     { background:#FEE2E2; color:#991B1B; }
+.sb-oncall    { background:#FFEDD5; color:#C2410C; }
+.sb-null      { background:#F3F4F6; color:#9CA3AF; }
+
+/* Telegram link */
+.tg { color: var(--teal); font-weight: 600; font-size: 11px; }
+.tg:hover { text-decoration: underline; }
+
+/* Week cells */
+.wcell {
+  padding: 4px 8px; border-radius: 8px;
+  font-size: 10px; font-weight: 700;
+  text-align: center; display: inline-block; white-space: nowrap;
+  min-width: 52px;
+}
+.wc-work      { background:#DCFCE7; color:#15803D; }
+.wc-dayoff    { background:#F1F5F9; color:#94A3B8; }
+.wc-vacation  { background:#DBEAFE; color:#1D4ED8; }
+.wc-sick      { background:#FEF9C3; color:#854D0E; }
+.wc-probation { background:var(--yellow); color:var(--dark); }
+.wc-fired     { background:#FEE2E2; color:#991B1B; }
+.wc-oncall    { background:#FFEDD5; color:#C2410C; }
+.wc-null      { background:#F3F4F6; color:#CBD5E1; }
+
+/* Mini calendar cells */
+.ccell {
+  width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+  display: inline-block; cursor: pointer;
+  transition: transform .1s; position: relative;
+}
+.ccell:hover { transform: scale(1.45); z-index: 10; }
+.ccell[data-t="work"]      { background: var(--s-work); }
+.ccell[data-t="dayoff"]    { background: var(--s-dayoff); }
+.ccell[data-t="vacation"]  { background: var(--s-vacation); }
+.ccell[data-t="sick"]      { background: var(--s-sick); }
+.ccell[data-t="probation"] { background: var(--yellow); box-shadow: 0 0 4px rgba(255,211,0,.5); }
+.ccell[data-t="fired"]     { background: var(--s-fired); }
+.ccell[data-t="oncall"]    { background: var(--s-oncall); }
+.ccell[data-t="other"]     { background: #DDE1EE; }
+.ccell[data-t="null"]      { background: var(--s-null); }
+.ccell.is-today    { outline: 2px solid var(--yellow); outline-offset: 1px; box-shadow: 0 0 6px rgba(255,211,0,.5); }
+.ccell.is-weekend  { opacity: .65; }
+.shifts-num { font-size: 11px; font-weight: 700; color: var(--s-work); margin-left: 8px; white-space: nowrap; }
+.cal-row { display: flex; align-items: center; gap: 1.5px; }
+
+/* Tooltip */
+#tip {
+  position: fixed; z-index: 9999;
+  background: var(--dark); color: #fff;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 11px; font-weight: 600;
+  padding: 5px 10px; border-radius: 8px;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+  transform: translate(-50%, calc(-100% - 8px));
+  display: none;
+}
+
+/* Empty state */
+.empty-state { text-align: center; padding: 64px 20px; }
+.empty-icon  { font-size: 42px; margin-bottom: 12px; }
+.empty-title { font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
+.empty-desc  { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+/* Skeleton rows */
+@keyframes sk { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+.sk {
+  background: linear-gradient(90deg,#eee 25%,#f5f5f5 50%,#eee 75%);
+  background-size: 800px 100%; animation: sk 1.4s infinite; border-radius: 5px;
+}
+.sk-row td { padding: 12px 14px; }
+.sk-b { height: 13px; border-radius: 4px; }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .app-header { flex-direction: column; align-items: flex-start; }
+  .kpi-grid   { grid-template-columns: repeat(2, 1fr); }
+  .chart-wrap { height: 190px; }
+  .table-toolbar { flex-direction: column; align-items: stretch; }
+  .search-wrap { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M13 2L9 8.5h8L13 2z" fill="#F5A623"/>
+          <rect x="9.5" y="8.5" width="7" height="9.5" rx="1" fill="#E8832A"/>
+          <rect x="9.5" y="16" width="7" height="3.5" rx="1" fill="#4ECDC4"/>
+          <path d="M9.5 9L6.5 15v4l3-2V9z" fill="#2D2D4E"/>
+          <path d="M16.5 9l3 6v4l-3-2V9z" fill="#2D2D4E"/>
+          <circle cx="13" cy="12" r="1.8" fill="white" opacity=".9"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">KEVIN</div>
+        <div class="brand-tag">Штатний графік</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="last-updated" id="lastUpdated">Завантаження...</div>
+      <div class="refresh-badge">
+        <div class="refresh-dot" id="refreshDot"></div>
+        <div class="countdown-wrap">
+          <span style="font-size:11px">Оновлення через <b id="countdown">5:00</b></span>
+          <div class="refresh-track"><div class="refresh-fill" id="refreshFill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Error -->
+  <div class="error-bar" id="errBar"></div>
+
+  <!-- Controls -->
+  <div class="control-panel">
+    <div class="dept-tabs" id="deptTabs"></div>
+    <div class="period-group">
+      <button class="period-btn" data-p="day"   onclick="setPeriod('day')">День</button>
+      <button class="period-btn" data-p="week"  onclick="setPeriod('week')">Тиждень</button>
+      <button class="period-btn active" data-p="month" onclick="setPeriod('month')">Місяць</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card featured c-total">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-value loading" id="kTotal">—</div>
+      <div class="kpi-label">Всього у штаті</div>
+      <div class="kpi-sub" id="kTotalSub"></div>
+    </div>
+    <div class="kpi-card c-working">
+      <div class="kpi-icon">✅</div>
+      <div class="kpi-value loading" id="kWork">—</div>
+      <div class="kpi-label">Працює сьогодні</div>
+    </div>
+    <div class="kpi-card c-vacation">
+      <div class="kpi-icon">🏖️</div>
+      <div class="kpi-value loading" id="kVac">—</div>
+      <div class="kpi-label">У відпустці</div>
+    </div>
+    <div class="kpi-card c-sick">
+      <div class="kpi-icon">🤒</div>
+      <div class="kpi-value loading" id="kSick">—</div>
+      <div class="kpi-label">Лікарняний</div>
+    </div>
+    <div class="kpi-card c-probation">
+      <div class="kpi-icon">🎓</div>
+      <div class="kpi-value loading" id="kProb">—</div>
+      <div class="kpi-label">Випробув. термін</div>
+      <div class="kpi-sub" id="kProbSub" style="color:var(--dark);opacity:.6"></div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-card">
+    <div class="card-header">
+      <div>
+        <div class="card-title" id="chartTitle">Динаміка штату — Поточний місяць</div>
+        <div class="card-sub" id="chartSub"></div>
+      </div>
+      <div class="chart-legend">
+        <div style="display:flex;align-items:center;gap:5px"><div class="legend-dot" style="background:var(--s-work)"></div>Працює</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="legend-dot" style="background:var(--s-vacation)"></div>Відпустка</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="legend-dot" style="background:var(--s-sick)"></div>Лікарняний</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="searchInput" type="text"
+          placeholder="Пошук: ПІБ, посада..." oninput="onSearch(this.value)">
+      </div>
+      <select class="filter-select" id="sfStatus" onchange="renderTable()">
+        <option value="">Всі статуси</option>
+        <option value="work">Працює</option>
+        <option value="dayoff">Вихідний</option>
+        <option value="vacation">Відпустка</option>
+        <option value="sick">Лікарняний</option>
+      </select>
+      <select class="filter-select" id="sfPos" onchange="renderTable()">
+        <option value="">Всі посади</option>
+      </select>
+      <div class="row-count" id="rowCount"></div>
+    </div>
+    <div class="table-scroll" id="tblScroll">
+      <table><thead id="tHead"></thead><tbody id="tBody"></tbody></table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Tooltip -->
+<div id="tip"></div>
+
+<script>
+// ================================================================
+// CONFIG
+// ================================================================
+const CFG = {
+  URL:      'https://script.google.com/macros/s/AKfycbx0vObyUb6f9nQmWtCmO8xtI_qm3lfWmWr1VeKOARYk0xh48gujsW16MLe91Szv-Njkpw/exec',
+  INTERVAL: 5 * 60 * 1000,
+  DEMO:     false   // true = показувати демо-дані без Google Sheets
+};
+
+// ================================================================
+// STATE
+// ================================================================
+const S = {
+  data:   null,
+  dept:   'all',
+  period: 'month',
+  search: '',
+  chart:  null,
+  timer:  null,
+  nextAt: null
+};
+
+// ================================================================
+// STATUS META
+// ================================================================
+const SM = {
+  work:      { l:'Працює',           badge:'sb-work',     wc:'wc-work'     },
+  dayoff:    { l:'Вихідний',         badge:'sb-dayoff',   wc:'wc-dayoff'   },
+  vacation:  { l:'Відпустка',        badge:'sb-vacation', wc:'wc-vacation' },
+  sick:      { l:'Лікарняний',       badge:'sb-sick',     wc:'wc-sick'     },
+  probation: { l:'Випробув. термін', badge:'sb-probation',wc:'wc-probation'},
+  fired:     { l:'Звільнено',        badge:'sb-fired',    wc:'wc-fired'    },
+  oncall:    { l:'Чергування',       badge:'sb-oncall',   wc:'wc-oncall'   },
+  other:     { l:'—',                badge:'sb-null',     wc:'wc-null'     },
+  null:      { l:'—',                badge:'sb-null',     wc:'wc-null'     }
+};
+
+function st(s)  { return s?.type ?? 'null'; }
+function sm(s)  { return SM[st(s)] ?? SM.null; }
+function sbadge(s) {
+  const m = sm(s); const lbl = s?.label ?? m.l;
+  return `<span class="sbadge ${m.badge}">${x(lbl)}</span>`;
+}
+
+// ================================================================
+// DATE UTILS
+// ================================================================
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+}
+function p2(n) { return String(n).padStart(2,'0'); }
+function isWE(ds) { const d = new Date(ds+'T00:00:00'); return d.getDay()===0||d.getDay()===6; }
+function dayNum(ds) { return new Date(ds+'T00:00:00').getDate(); }
+function dayShort(ds) {
+  return ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'][new Date(ds+'T00:00:00').getDay()];
+}
+function ddmm(ds) {
+  const d = new Date(ds+'T00:00:00');
+  return `${d.getDate()}.${d.getMonth()+1}`;
+}
+
+function weekDates() {
+  const now = new Date();
+  const dow = now.getDay()===0 ? 6 : now.getDay()-1;
+  const mon = new Date(now); mon.setDate(now.getDate()-dow);
+  return Array.from({length:7},(_,i)=>{
+    const d=new Date(mon); d.setDate(mon.getDate()+i);
+    return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+  });
+}
+
+function allDates() {
+  if (!S.data) return [];
+  const set = new Set();
+  S.data.departments.forEach(d => d.dates?.forEach(dt => set.add(dt)));
+  return [...set].sort();
+}
+
+function filteredDates() {
+  const all = allDates(), td = today();
+  if (S.period==='day') {
+    const i = all.indexOf(td);
+    return i===-1 ? [td] : all.slice(Math.max(0,i-4), i+5);
+  }
+  if (S.period==='week') return weekDates();
+  return all;
+}
+
+// ================================================================
+// EMPLOYEES
+// ================================================================
+function filteredEmps() {
+  if (!S.data) return [];
+  const td = today();
+  const sf = document.getElementById('sfStatus')?.value ?? '';
+  const pf = document.getElementById('sfPos')?.value    ?? '';
+
+  const emps = [];
+  for (const dept of S.data.departments) {
+    if (S.dept !== 'all' && dept.name !== S.dept) continue;
+    for (const e of dept.employees) {
+      if (e.status === 'fired') continue;
+      if (S.search) {
+        const q = S.search.toLowerCase();
+        if (!e.name.toLowerCase().includes(q) &&
+            !e.position.toLowerCase().includes(q) &&
+            !(e.subDepartment||'').toLowerCase().includes(q)) continue;
+      }
+      if (sf && st(e.schedule?.[td]) !== sf) continue;
+      if (pf && e.position !== pf) continue;
+      emps.push({...e, _dept: dept.name});
+    }
+  }
+  return emps;
+}
+
+function groupEmps(emps, byDept) {
+  const g = {};
+  for (const e of emps) {
+    const k = byDept ? e._dept : (e.subDepartment || 'Без підвідділу');
+    if (!g[k]) g[k]=[];
+    g[k].push(e);
+  }
+  return g;
+}
+
+// ================================================================
+// KPIs
+// ================================================================
+function renderKPIs() {
+  const emps = filteredEmps(), td = today();
+  const total    = emps.length;
+  const working  = emps.filter(e=>st(e.schedule?.[td])==='work').length;
+  const vacation = emps.filter(e=>st(e.schedule?.[td])==='vacation').length;
+  const sick     = emps.filter(e=>st(e.schedule?.[td])==='sick').length;
+  const probation= emps.filter(e=>e.status==='probation').length;
+
+  function sv(id, val) {
+    const el=document.getElementById(id);
+    if (!el) return;
+    el.textContent=val;
+    el.classList.remove('loading');
+  }
+  sv('kTotal', total);
+  sv('kWork',  working);
+  sv('kVac',   vacation);
+  sv('kSick',  sick);
+  sv('kProb',  probation);
+
+  document.getElementById('kTotalSub').textContent =
+    S.dept==='all' ? 'Весь штат' : S.dept;
+  document.getElementById('kProbSub').textContent =
+    probation ? `${probation} із ${total} осіб` : '';
+}
+
+// ================================================================
+// CHART
+// ================================================================
+function renderChart() {
+  const ctx = document.getElementById('mainChart');
+  if (!ctx) return;
+  if (S.chart) { S.chart.destroy(); S.chart=null; }
+
+  const emps  = filteredEmps();
+  const dates = filteredDates();
+  const td    = today();
+  const pn    = {day:'Сьогодні ±4 дні', week:'Поточний тиждень', month:'Поточний місяць'};
+  const dn    = S.dept==='all' ? 'Весь штат' : S.dept;
+
+  document.getElementById('chartTitle').textContent = `Динаміка штату — ${pn[S.period]}`;
+  document.getElementById('chartSub').textContent   = dn;
+
+  if (!emps.length || !dates.length) return;
+
+  const labels   = dates.map(d => S.period==='month' ? dayNum(d) : `${dayShort(d)} ${ddmm(d)}`);
+  const dWork    = dates.map(d => emps.filter(e=>st(e.schedule?.[d])==='work').length);
+  const dVac     = dates.map(d => emps.filter(e=>st(e.schedule?.[d])==='vacation').length);
+  const dSick    = dates.map(d => emps.filter(e=>st(e.schedule?.[d])==='sick').length);
+
+  S.chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Працює',
+          data: dWork,
+          backgroundColor: dates.map(d => d===td ? '#16A34A' : 'rgba(34,197,94,.75)'),
+          borderColor: '#22C55E', borderWidth: 1, borderRadius: 5, order: 1
+        },
+        {
+          label: 'Відпустка',
+          data: dVac,
+          backgroundColor: 'rgba(96,165,250,.7)',
+          borderColor: '#60A5FA', borderWidth: 1, borderRadius: 5, order: 2
+        },
+        {
+          label: 'Лікарняний',
+          data: dSick,
+          backgroundColor: 'rgba(251,191,36,.7)',
+          borderColor: '#FBBF24', borderWidth: 1, borderRadius: 5, order: 3
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1A1A2E',
+          titleFont: { family: 'Montserrat', weight: '700', size: 12 },
+          bodyFont:  { family: 'Montserrat', size: 11 },
+          padding: 10, cornerRadius: 10,
+          callbacks: {
+            title: items => {
+              const d = dates[items[0].dataIndex];
+              return d===td ? `📅 Сьогодні (${d})` : d;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true, grid: { display: false },
+          ticks: {
+            font: { family:'Montserrat', size:10, weight:'600' },
+            color: dates.map(d => d===td ? '#FFD300' : isWE(d) ? '#F87171' : '#8892A4'),
+            maxRotation: 0
+          }
+        },
+        y: {
+          stacked: true, beginAtZero: true,
+          ticks: { font:{ family:'Montserrat', size:10 }, stepSize:1 },
+          grid: { color: '#F0F2F8' }
+        }
+      },
+      animation: { duration: 350 }
+    }
+  });
+}
+
+// ================================================================
+// TABLE
+// ================================================================
+function renderTable() {
+  const emps  = filteredEmps();
+  const td    = today();
+  const dates = filteredDates();
+  const allD  = S.dept==='all';
+
+  document.getElementById('rowCount').textContent =
+    `${emps.length} ${emps.length===1?'співробітник':emps.length<5?'співробітники':'співробітників'}`;
+
+  const thead = document.getElementById('tHead');
+  const tbody = document.getElementById('tBody');
+
+  // empty state
+  if (!emps.length) {
+    thead.innerHTML='';
+    tbody.innerHTML=`<tr><td colspan="10">
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">Нічого не знайдено</div>
+        <div class="empty-desc">Змініть фільтри або пошуковий запит</div>
+      </div></td></tr>`;
+    return;
+  }
+
+  // Header
+  thead.innerHTML = S.period==='month'
+    ? buildMonthHead(dates, td)
+    : S.period==='week'
+      ? buildWeekHead(dates, td)
+      : buildDayHead(allD);
+
+  // Rows
+  const grouped = groupEmps(emps, allD);
+  let html = '', n = 0;
+  for (const [grp, list] of Object.entries(grouped)) {
+    html += `<tr class="g-header"><td colspan="99">
+      ${allD?'🏢':'▸'} ${x(grp)}
+      <span style="color:var(--muted);font-weight:500"> (${list.length})</span>
+    </td></tr>`;
+    for (const e of list) {
+      n++;
+      html += S.period==='month' ? rowMonth(e,dates,td,n)
+            : S.period==='week'  ? rowWeek(e,dates,td,n,allD)
+            :                      rowDay(e,td,n,allD);
+    }
+  }
+  tbody.innerHTML = html;
+  hookTooltips();
+}
+
+// ── Day head ──
+function buildDayHead(allD) {
+  return `<tr>
+    <th>#</th>
+    <th>ПІБ</th>
+    ${allD?'<th>Відділ</th>':'<th>Підвідділ</th>'}
+    <th>Посада</th>
+    <th>Telegram</th>
+    <th>Статус</th>
+    <th>Графік</th>
+  </tr>`;
+}
+function rowDay(e, td, n, allD) {
+  const s = e.schedule?.[td];
+  const tg = e.telegram ? `<a class="tg" href="https://t.me/${e.telegram.replace('@','')}" target="_blank">${x(e.telegram)}</a>` : '<span style="color:var(--muted)">—</span>';
+  return `<tr>
+    <td class="n-col">${n}</td>
+    <td>
+      <div class="emp-name">${x(e.name)}${e.status==='probation'?'<span class="badge-probation-inline">ВП</span>':''}</div>
+      <div class="emp-sub">${x(allD?e.subDepartment:e.supervisor||'')}</div>
+    </td>
+    <td style="font-size:12px;font-weight:500">${x(allD?e._dept:e.subDepartment)}</td>
+    <td style="font-size:12px;font-weight:500">${x(e.position)}</td>
+    <td>${tg}</td>
+    <td>${sbadge(s)}</td>
+    <td style="font-size:12px;font-weight:700;color:var(--dark)">${s?.hours??s?.label??'—'}</td>
+  </tr>`;
+}
+
+// ── Week head ──
+function buildWeekHead(dates, td) {
+  const cols = dates.map(d=>{
+    const cls = d===td?'d-today':isWE(d)?'d-we':'';
+    return `<th class="${cls}">${dayShort(d)}<br><span style="font-weight:500">${ddmm(d)}</span></th>`;
+  }).join('');
+  return `<tr><th>#</th><th>ПІБ</th><th>Посада</th>${cols}<th>Змін</th></tr>`;
+}
+function rowWeek(e, dates, td, n, allD) {
+  const cells = dates.map(d=>{
+    const s=e.schedule?.[d]; const t=st(s);
+    const lbl = t==='work'?(s.hours??s.label??'✓'):SM[t]?.l?.split(' ')[0]??'—';
+    return `<td><span class="wcell wc-${t}">${x(lbl)}</span></td>`;
+  }).join('');
+  const shifts = dates.filter(d=>st(e.schedule?.[d])==='work').length;
+  return `<tr>
+    <td class="n-col">${n}</td>
+    <td>
+      <div class="emp-name">${x(e.name)}${e.status==='probation'?'<span class="badge-probation-inline">ВП</span>':''}</div>
+      <div class="emp-sub">${x(e.subDepartment)}</div>
+    </td>
+    <td style="font-size:12px;font-weight:500">${x(e.position)}</td>
+    ${cells}
+    <td style="font-weight:700;color:var(--s-work)">${shifts}</td>
+  </tr>`;
+}
+
+// ── Month head ──
+function buildMonthHead(dates, td) {
+  const cols = dates.map(d=>{
+    const cls = `d-col${d===td?' d-today':isWE(d)?' d-we':''}`;
+    return `<th class="${cls}">${dayNum(d)}</th>`;
+  }).join('');
+  return `<tr>
+    <th>#</th><th>ПІБ</th><th>Посада</th>
+    <th colspan="${dates.length}" style="text-align:center;padding-left:4px">← Календар місяця →</th>
+    <th>Змін</th>
+  </tr>
+  <tr><th colspan="3"></th>${cols}<th></th></tr>`;
+}
+function rowMonth(e, dates, td, n) {
+  const cells = dates.map(d=>{
+    const s=e.schedule?.[d]; const t=st(s);
+    const tip=`${d}: ${s?.hours??s?.label??SM[t]?.l??'—'}`;
+    const cls=`ccell${d===td?' is-today':''}${isWE(d)&&t==='dayoff'?' is-weekend':''}`;
+    return `<td class="d-col" style="padding:2px 0">
+      <span class="${cls}" data-t="${t}" data-tip="${x(tip)}"></span>
+    </td>`;
+  }).join('');
+  const shifts = dates.filter(d=>st(e.schedule?.[d])==='work').length;
+  return `<tr>
+    <td class="n-col">${n}</td>
+    <td>
+      <div class="emp-name">${x(e.name)}${e.status==='probation'?'<span class="badge-probation-inline">ВП</span>':''}</div>
+      <div class="emp-sub">${x(e.subDepartment)}</div>
+    </td>
+    <td style="font-size:12px;font-weight:500">${x(e.position)}</td>
+    ${cells}
+    <td><span class="shifts-num">${shifts}</span></td>
+  </tr>`;
+}
+
+// ── Tooltips for calendar cells ──
+function hookTooltips() {
+  const tip = document.getElementById('tip');
+  document.querySelectorAll('.ccell[data-tip]').forEach(el=>{
+    el.addEventListener('mouseenter', e=>{
+      tip.textContent=el.dataset.tip;
+      tip.style.display='block';
+      moveTip(e);
+    });
+    el.addEventListener('mousemove', moveTip);
+    el.addEventListener('mouseleave', ()=>tip.style.display='none');
+  });
+  function moveTip(e){ tip.style.left=e.clientX+'px'; tip.style.top=e.clientY+'px'; }
+}
+
+// ================================================================
+// DEPT TABS
+// ================================================================
+function renderTabs() {
+  if (!S.data) return;
+  const tabs = document.getElementById('deptTabs');
+  const allActive = S.data.departments.flatMap(d=>d.employees).filter(e=>e.status!=='fired').length;
+
+  let h = `<button class="tab-btn ${S.dept==='all'?'active':''}" onclick="setDept('all')">Весь штат (${allActive})</button>`;
+  for (const d of S.data.departments) {
+    const cnt = d.employees.filter(e=>e.status!=='fired').length;
+    const short = d.name.replace('Відділ ','').replace('HR-відділ','HR');
+    h += `<button class="tab-btn ${S.dept===d.name?'active':''}" onclick="setDept(${JSON.stringify(d.name)})">${x(short)} (${cnt})</button>`;
+  }
+  tabs.innerHTML = h;
+}
+
+// ================================================================
+// POSITION FILTER
+// ================================================================
+function fillPosFilter() {
+  const all = S.data?.departments.flatMap(d=>d.employees).filter(e=>e.status!=='fired') ?? [];
+  const pos = [...new Set(all.map(e=>e.position).filter(Boolean))].sort();
+  const el  = document.getElementById('sfPos');
+  const cur = el.value;
+  el.innerHTML = '<option value="">Всі посади</option>' +
+    pos.map(p=>`<option value="${x(p)}">${x(p)}</option>`).join('');
+  if (pos.includes(cur)) el.value = cur;
+}
+
+// ================================================================
+// RENDER ALL
+// ================================================================
+function renderAll() {
+  if (!S.data) return;
+  fillPosFilter();
+  renderTabs();
+  renderKPIs();
+  renderChart();
+  renderTable();
+}
+
+// ================================================================
+// FETCH
+// ================================================================
+async function fetchData() {
+  const dot = document.getElementById('refreshDot');
+  dot.classList.add('loading');
+  try {
+    let data;
+    if (CFG.DEMO || !CFG.URL || CFG.URL==='https://script.google.com/macros/s/AKfycbx0vObyUb6f9nQmWtCmO8xtI_qm3lfWmWr1VeKOARYk0xh48gujsW16MLe91Szv-Njkpw/exec') {
+      if (CFG.URL==='https://script.google.com/macros/s/AKfycbx0vObyUb6f9nQmWtCmO8xtI_qm3lfWmWr1VeKOARYk0xh48gujsW16MLe91Szv-Njkpw/exec') {
+        showErr('⚠️ URL Apps Script не вказано. Відкрий dashboard.html і встав URL у CFG.URL. Зараз показані демо-дані.');
+      }
+      data = demoData();
+    } else {
+      const r = await fetch(CFG.URL);
+      data = await r.json();
+      if (data.error) throw new Error(data.error);
+      hideErr();
+    }
+    S.data = data;
+    const dt = new Date(data.lastUpdated);
+    document.getElementById('lastUpdated').textContent =
+      `Оновлено: ${dt.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'})}`;
+    renderAll();
+  } catch(err) {
+    showErr('Помилка завантаження: ' + err.message);
+  } finally {
+    dot.classList.remove('loading');
+  }
+}
+
+function showErr(msg){ const e=document.getElementById('errBar'); e.textContent=msg; e.classList.add('show'); }
+function hideErr()   { document.getElementById('errBar').classList.remove('show'); }
+
+// ================================================================
+// AUTO-REFRESH + COUNTDOWN
+// ================================================================
+function startRefreshTimer() {
+  S.nextAt = Date.now() + CFG.INTERVAL;
+  if (S.timer) clearInterval(S.timer);
+  S.timer = setInterval(()=>{
+    const rem = Math.max(0, S.nextAt - Date.now());
+    const pct = (rem / CFG.INTERVAL)*100;
+    const min = Math.floor(rem/60000);
+    const sec = Math.floor((rem%60000)/1000);
+    document.getElementById('countdown').textContent = `${min}:${p2(sec)}`;
+    document.getElementById('refreshFill').style.width = pct+'%';
+    if (rem<=0) {
+      clearInterval(S.timer);
+      fetchData().then(startRefreshTimer);
+    }
+  }, 1000);
+}
+
+// ================================================================
+// EVENTS
+// ================================================================
+function setDept(d) { S.dept=d; renderTabs(); renderKPIs(); renderChart(); renderTable(); }
+function setPeriod(p) {
+  S.period=p;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.toggle('active',b.dataset.p===p));
+  renderChart(); renderTable();
+}
+function onSearch(q) { S.search=q.trim(); renderTable(); }
+
+// ================================================================
+// XSS escape
+// ================================================================
+function x(s) {
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ================================================================
+// DEMO DATA
+// ================================================================
+function demoData() {
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth()+1;
+  const dim=new Date(y,m,0).getDate();
+  const dates=Array.from({length:dim},(_,i)=>`${y}-${p2(m)}-${p2(i+1)}`);
+  function mkSched(isProbation){
+    const s={};
+    for(const d of dates){
+      const we=isWE(d), r=Math.random();
+      if(we)          s[d]={type:'dayoff',   label:'Вихідний'};
+      else if(isProbation && r<.9) s[d]={type:'work',label:'10-19',hours:'10:00–19:00',duration:9};
+      else if(r<.82)  s[d]={type:'work',     label:'10-19',hours:'10:00–19:00',duration:9};
+      else if(r<.90)  s[d]={type:'vacation', label:'Відпустка'};
+      else if(r<.96)  s[d]={type:'sick',     label:'Лікарняний'};
+      else            s[d]={type:'dayoff',   label:'Вихідний'};
+    }
+    return s;
+  }
+  function emp(name,sub,pos,tg,status='active'){
+    return {name,subDepartment:sub,position:pos,telegram:tg,supervisor:'',status,schedule:mkSched(status==='probation')};
+  }
+  return {
+    lastUpdated: new Date().toISOString().slice(0,19),
+    month:m, year:y, _demo:true,
+    departments:[
+      { name:'Відділ продажів', dates, employees:[
+        emp('Прийма Микола',   'Діагности',   'Діагност',          '@mykola'),
+        emp('Іщенко Аліна',    'Діагности',   'Діагност',          '@alina'),
+        emp('Радович Андрій',  'Діагности',   'Діагност',          '@andrii', 'probation'),
+        emp('Мазуркевич Орест','Прі-сейл',    'Кваліфікатор',      '@orest'),
+        emp('Коваленко Микола','Прі-сейл',    'Кваліфікатор',      '@mykola2','probation'),
+        emp('Рудавський Арсен','Рег. менеджери','Team Lead',        '@arsen'),
+        emp('Гусєва Марія',    'Рег. менеджери','Рег. менеджер',   '@maria'),
+      ]},
+      { name:'Відділ продукту', dates, employees:[
+        emp('Шевчук Богдана',   'Бек офіс',  'Head of Product',    '@bogdana'),
+        emp('Дяків Вікторія',   'Викладачі', 'Викладач Історії',   '@vika'),
+        emp('Миронюк Єлизавета','PM',         'PM',                 '@liza', 'probation'),
+      ]},
+      { name:'Відділ маркетингу', dates, employees:[
+        emp('Особов Нікіта',    'Маркетинг', 'Таргетолог',         '@nikita'),
+        emp('Матійчук Дарія',   'Маркетинг', 'SMM manager',        '@dasha'),
+        emp('Стоцька Вікторія', 'Маркетинг', 'Контент-маркетолог', '@vika2'),
+      ]},
+      { name:'Відділ фінансів', dates, employees:[
+        emp('Олар Марія',       'Фінанси',   'Finance manager',    '@mariia'),
+        emp('Яцина Ярослава',   'Фінанси',   'CFO',                '@yaroslava'),
+      ]},
+      { name:'HR-відділ', dates, employees:[
+        emp('Даценко Анжеліка', 'HR',        'HRD',                '@anzhelika'),
+        emp('Акимова Катерина', 'HR',        'Рекрутер',           '@kateryna'),
+        emp('Кошова Анастасія', 'HR',        'Рекрутер',           '@nastya', 'probation'),
+      ]}
+    ]
+  };
+}
+
+// ================================================================
+// INIT
+// ================================================================
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Skeleton
+  document.getElementById('tBody').innerHTML =
+    Array.from({length:7}).map(()=>`
+      <tr class="sk-row">
+        <td><div class="sk-b sk" style="width:20px"></div></td>
+        <td><div class="sk-b sk" style="width:140px"></div></td>
+        <td><div class="sk-b sk" style="width:100px"></div></td>
+        <td><div class="sk-b sk" style="width:180px"></div></td>
+      </tr>`).join('');
+  fetchData().then(startRefreshTimer);
+});
+</script>
+</body>
+</html>
