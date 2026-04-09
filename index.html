@@ -1016,10 +1016,8 @@ async function fetchData() {
   dot.classList.add('loading');
   try {
     let data;
-    if (CFG.DEMO || !CFG.URL || CFG.URL==='https://script.google.com/macros/s/AKfycbx0vObyUb6f9nQmWtCmO8xtI_qm3lfWmWr1VeKOARYk0xh48gujsW16MLe91Szv-Njkpw/exec') {
-      if (CFG.URL==='https://script.google.com/macros/s/AKfycbx0vObyUb6f9nQmWtCmO8xtI_qm3lfWmWr1VeKOARYk0xh48gujsW16MLe91Szv-Njkpw/exec') {
-        showErr('⚠️ URL Apps Script не вказано. Відкрий dashboard.html і встав URL у CFG.URL. Зараз показані демо-дані.');
-      }
+    if (CFG.DEMO || !CFG.URL || CFG.URL==='YOUR_APPS_SCRIPT_URL_HERE') {
+      showErr('⚠️ URL Apps Script не вказано. Відкрий index.html і встав URL у CFG.URL. Зараз показані демо-дані.');
       data = demoData();
     } else {
       const r = await fetch(CFG.URL);
