@@ -974,13 +974,17 @@ function renderTabs() {
   const tabs = document.getElementById('deptTabs');
   const allActive = S.data.departments.flatMap(d=>d.employees).filter(e=>e.status!=='fired').length;
 
-  let h = `<button class="tab-btn ${S.dept==='all'?'active':''}" onclick="setDept('all')">Весь штат (${allActive})</button>`;
+  let h = `<button class="tab-btn ${S.dept==='all'?'active':''}" data-dept="all">Весь штат (${allActive})</button>`;
   for (const d of S.data.departments) {
     const cnt = d.employees.filter(e=>e.status!=='fired').length;
     const short = d.name.replace('Відділ ','').replace('HR-відділ','HR');
-    h += `<button class="tab-btn ${S.dept===d.name?'active':''}" onclick="setDept(${JSON.stringify(d.name)})">${x(short)} (${cnt})</button>`;
+    h += `<button class="tab-btn ${S.dept===d.name?'active':''}" data-dept="${x(d.name)}">${x(short)} (${cnt})</button>`;
   }
   tabs.innerHTML = h;
+  // Attach click handlers via data attribute (safe for Cyrillic names)
+  tabs.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => setDept(btn.dataset.dept));
+  });
 }
 
 // ================================================================
