@@ -406,6 +406,17 @@ tbody td { padding: 10px 14px; vertical-align: middle; color: var(--dark); }
   vertical-align: middle;
 }
 
+/* Stream badge (потік/група — для відділу продукту) */
+.badge-stream {
+  display: inline-flex; align-items: center;
+  background: rgba(78,205,196,.15); color: #0D9488;
+  border: 1px solid rgba(78,205,196,.35);
+  font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 10px;
+  margin-left: 5px; vertical-align: middle;
+  letter-spacing: .3px; white-space: nowrap;
+}
+
 /* Status badges */
 .sbadge {
   display: inline-flex; align-items: center; gap: 4px;
@@ -438,8 +449,9 @@ tbody td { padding: 10px 14px; vertical-align: middle; color: var(--dark); }
 .wc-sick      { background:#FEF9C3; color:#854D0E; }
 .wc-probation { background:var(--yellow); color:var(--dark); }
 .wc-fired     { background:#FEE2E2; color:#991B1B; }
-.wc-oncall    { background:#FFEDD5; color:#C2410C; }
-.wc-null      { background:#F3F4F6; color:#CBD5E1; }
+.wc-oncall       { background:#FFEDD5; color:#C2410C; }
+.wc-null         { background:#F3F4F6; color:#CBD5E1; }
+.wc-work-short   { background:#DCFCE7; color:#166534; border:1.5px dashed #86EFAC; }
 
 /* Mini calendar cells */
 .ccell {
@@ -449,6 +461,13 @@ tbody td { padding: 10px 14px; vertical-align: middle; color: var(--dark); }
 }
 .ccell:hover { transform: scale(1.45); z-index: 10; }
 .ccell[data-t="work"]      { background: var(--s-work); }
+.ccell[data-t="work"][data-short="1"] {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--s-work) 0px, var(--s-work) 4px,
+    #86EFAC 4px, #86EFAC 8px
+  );
+}
 .ccell[data-t="dayoff"]    { background: var(--s-dayoff); }
 .ccell[data-t="vacation"]  { background: var(--s-vacation); }
 .ccell[data-t="sick"]      { background: var(--s-sick); }
@@ -629,6 +648,7 @@ tbody td { padding: 10px 14px; vertical-align: middle; color: var(--dark); }
       <select class="filter-select" id="sfStatus" onchange="renderTable()">
         <option value="">Всі статуси</option>
         <option value="work">Працює</option>
+        <option value="oncall">🔄 Черговий</option>
         <option value="dayoff">Вихідний</option>
         <option value="vacation">Відпустка</option>
         <option value="sick">Лікарняний</option>
@@ -716,6 +736,19 @@ function sbadge(s) {
   return `<span class="sbadge ${m.badge}">${x(lbl)}</span>`;
 }
 
+// Неповний робочий день: тип=work і тривалість < 8 год
+function isShortShift(s) {
+  return s?.type === 'work' && typeof s.duration === 'number' && s.duration < 8;
+}
+
+// Бейджики поруч з ім'ям: ВП (випробування) + потік
+function nameBadges(e) {
+  let b = '';
+  if (e.status === 'probation') b += '<span class="badge-probation-inline">ВП</span>';
+  if (e.stream)                 b += `<span class="badge-stream">${x(e.stream)}</span>`;
+  return b;
+}
+
 // ================================================================
 // DATE UTILS
 // ================================================================
@@ -781,7 +814,16 @@ function filteredEmps() {
             !e.position.toLowerCase().includes(q) &&
             !(e.subDepartment||'').toLowerCase().includes(q)) continue;
       }
-      if (sf && st(e.schedule?.[td]) !== sf) continue;
+      if (sf) {
+        if (sf === 'oncall') {
+          // Черговий — перевіряємо у межах поточного periodу перегляду
+          const hasOncall = filteredDates().some(d => st(e.schedule?.[d]) === 'oncall');
+          if (!hasOncall) continue;
+        } else {
+          // Інші статуси — перевіряємо на сьогодні
+          if (st(e.schedule?.[td]) !== sf) continue;
+        }
+      }
       if (pf && e.position !== pf) continue;
       emps.push({...e, _dept: dept.name});
     }
@@ -986,14 +1028,16 @@ function rowDay(e, td, n, allD) {
   return `<tr>
     <td class="n-col">${n}</td>
     <td>
-      <div class="emp-name">${x(e.name)}${e.status==='probation'?'<span class="badge-probation-inline">ВП</span>':''}</div>
+      <div class="emp-name">${x(e.name)}${nameBadges(e)}</div>
       <div class="emp-sub">${x(allD?e.subDepartment:e.supervisor||'')}</div>
     </td>
     <td style="font-size:12px;font-weight:500">${x(allD?e._dept:e.subDepartment)}</td>
     <td style="font-size:12px;font-weight:500">${x(e.position)}</td>
     <td>${tg}</td>
     <td>${sbadge(s)}</td>
-    <td style="font-size:12px;font-weight:700;color:var(--dark)">${s?.hours??s?.label??'—'}</td>
+    <td style="font-size:12px;font-weight:700;color:var(--dark)">
+      ${s?.hours??s?.label??'—'}${isShortShift(s)?'<span style="margin-left:4px;font-size:10px;color:#D97706" title="Неповний робочий день (менше 8 год)">⚡</span>':''}
+    </td>
   </tr>`;
 }
 
@@ -1009,13 +1053,15 @@ function rowWeek(e, dates, td, n, allD) {
   const cells = dates.map(d=>{
     const s=e.schedule?.[d]; const t=st(s);
     const lbl = t==='work'?(s.hours??s.label??'✓'):SM[t]?.l?.split(' ')[0]??'—';
-    return `<td><span class="wcell wc-${t}">${x(lbl)}</span></td>`;
+    const wcls = t==='work' && isShortShift(s) ? 'wc-work-short' : `wc-${t}`;
+    const shortMark = isShortShift(s) ? ' ⚡' : '';
+    return `<td><span class="wcell ${wcls}">${x(lbl)}${shortMark}</span></td>`;
   }).join('');
   const shifts = dates.filter(d=>st(e.schedule?.[d])==='work').length;
   return `<tr>
     <td class="n-col">${n}</td>
     <td>
-      <div class="emp-name">${x(e.name)}${e.status==='probation'?'<span class="badge-probation-inline">ВП</span>':''}</div>
+      <div class="emp-name">${x(e.name)}${nameBadges(e)}</div>
       <div class="emp-sub">${x(e.subDepartment)}</div>
     </td>
     <td style="font-size:12px;font-weight:500">${x(e.position)}</td>
@@ -1040,17 +1086,19 @@ function buildMonthHead(dates, td) {
 function rowMonth(e, dates, td, n) {
   const cells = dates.map(d=>{
     const s=e.schedule?.[d]; const t=st(s);
-    const tip=`${d}: ${s?.hours??s?.label??SM[t]?.l??'—'}`;
+    const shortFlag = isShortShift(s);
+    const shortNote = shortFlag ? ' ⚡ неповний день' : '';
+    const tip=`${d}: ${s?.hours??s?.label??SM[t]?.l??'—'}${shortNote}`;
     const cls=`ccell${d===td?' is-today':''}${isWE(d)&&t==='dayoff'?' is-weekend':''}`;
     return `<td class="d-col" style="padding:2px 0">
-      <span class="${cls}" data-t="${t}" data-tip="${x(tip)}"></span>
+      <span class="${cls}" data-t="${t}" data-short="${shortFlag?'1':'0'}" data-tip="${x(tip)}"></span>
     </td>`;
   }).join('');
   const shifts = dates.filter(d=>st(e.schedule?.[d])==='work').length;
   return `<tr>
     <td class="n-col">${n}</td>
     <td>
-      <div class="emp-name">${x(e.name)}${e.status==='probation'?'<span class="badge-probation-inline">ВП</span>':''}</div>
+      <div class="emp-name">${x(e.name)}${nameBadges(e)}</div>
       <div class="emp-sub">${x(e.subDepartment)}</div>
     </td>
     <td style="font-size:12px;font-weight:500">${x(e.position)}</td>
