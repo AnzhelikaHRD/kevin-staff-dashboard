@@ -816,11 +816,14 @@ function filteredEmps() {
       }
       if (sf) {
         if (sf === 'oncall') {
-          // Черговий — перевіряємо у межах поточного periodу перегляду
-          const hasOncall = filteredDates().some(d => st(e.schedule?.[d]) === 'oncall');
-          if (!hasOncall) continue;
+          // Черговий:
+          //   День    → лише сьогодні
+          //   Тиждень → хоча б один день поточного тижня
+          //   Місяць  → хоча б один день місяця
+          const checkDates = S.period === 'day' ? [td] : filteredDates();
+          if (!checkDates.some(d => st(e.schedule?.[d]) === 'oncall')) continue;
         } else {
-          // Інші статуси — перевіряємо на сьогодні
+          // Всі інші статуси — завжди перевіряємо лише сьогодні
           if (st(e.schedule?.[td]) !== sf) continue;
         }
       }
