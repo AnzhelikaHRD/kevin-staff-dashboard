@@ -192,6 +192,33 @@ body::after {
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 
+/* ── Month navigator ───────────────────────────────────────── */
+.month-nav {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: var(--radius-pill); padding: 3px 3px 3px 10px;
+  box-shadow: var(--shadow);
+}
+.month-nav-label {
+  font-size: 13px; font-weight: 700; color: var(--dark);
+  min-width: 110px; text-align: center; letter-spacing: -.2px;
+}
+.month-nav-btn {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: transparent; color: var(--muted);
+  font-size: 16px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.month-nav-btn:hover:not(:disabled) { background: var(--yellow); color: var(--dark); }
+.month-nav-btn:disabled { opacity: .25; cursor: not-allowed; }
+.month-nav-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 7px;
+  border-radius: 8px; background: var(--teal-soft);
+  color: #0D9488; letter-spacing: .3px; white-space: nowrap;
+}
+.month-nav-badge.is-current { background: var(--yellow-soft); color: #A16207; }
+
 /* ── Control panel ─────────────────────────────────────────── */
 .control-panel {
   display: flex; align-items: center; justify-content: space-between;
@@ -580,6 +607,16 @@ tbody td { padding: 10px 14px; vertical-align: middle; color: var(--dark); }
   <!-- Error -->
   <div class="error-bar" id="errBar"></div>
 
+  <!-- Month navigator -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+    <div class="month-nav">
+      <button class="month-nav-btn" id="mnPrev" title="Попередній місяць">‹</button>
+      <span class="month-nav-label" id="mnLabel">—</span>
+      <button class="month-nav-btn" id="mnNext" title="Наступний місяць">›</button>
+    </div>
+    <span class="month-nav-badge is-current" id="mnBadge" style="display:none">Поточний місяць</span>
+  </div>
+
   <!-- Controls -->
   <div class="control-panel">
     <div class="dept-tabs" id="deptTabs"></div>
@@ -694,10 +731,14 @@ const PWD = {
   // Видаляє пароль (при помилці unauthorized)
   clear() { sessionStorage.removeItem(this.KEY); },
 
-  // Додає ?pwd=... до URL запиту
-  url() {
+  // Додає ?pwd=...&month=...&year=... до URL запиту
+  url(month, year) {
     const p = this.get();
-    return p ? `${CFG.URL}?pwd=${encodeURIComponent(p)}` : CFG.URL;
+    let u = CFG.URL;
+    const params = [];
+    if (p)     params.push(`pwd=${encodeURIComponent(p)}`);
+    if (month) params.push(`month=${month}&year=${year}`);
+    return params.length ? `${u}?${params.join('&')}` : u;
   }
 };
 
@@ -705,13 +746,17 @@ const PWD = {
 // STATE
 // ================================================================
 const S = {
-  data:   null,
-  dept:   'all',
-  period: 'month',
-  search: '',
-  chart:  null,
-  timer:  null,
-  nextAt: null
+  data:            null,
+  dept:            'all',
+  period:          'month',
+  search:          '',
+  chart:           null,
+  timer:           null,
+  nextAt:          null,
+  // Навігація по місяцях
+  viewMonth:       null,   // null = поточний місяць (визначається сервером)
+  viewYear:        null,
+  availableMonths: []      // ["2026-04","2026-05",...] — з відповіді сервера
 };
 
 // ================================================================
@@ -978,11 +1023,16 @@ function renderTable() {
   // empty state
   if (!emps.length) {
     thead.innerHTML='';
+    // Перевіряємо: чи є взагалі дані за цей місяць (чи графік просто не заповнений)?
+    const hasAnyDates = S.data?.departments?.some(d => d.dates?.length > 0);
+    const ym = viewYM();
+    const cur = currentYM();
+    const isFuture = ym > cur;
     tbody.innerHTML=`<tr><td colspan="10">
       <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <div class="empty-title">Нічого не знайдено</div>
-        <div class="empty-desc">Змініть фільтри або пошуковий запит</div>
+        <div class="empty-icon">${isFuture ? '📅' : hasAnyDates ? '🔍' : '📋'}</div>
+        <div class="empty-title">${isFuture ? 'Графік ще не заповнений' : hasAnyDates ? 'Нічого не знайдено' : 'Немає даних за цей місяць'}</div>
+        <div class="empty-desc">${isFuture ? 'Цей місяць ще попереду — графік буде доступний після заповнення' : hasAnyDates ? 'Змініть фільтри або пошуковий запит' : 'Перейдіть до іншого місяця або заповніть графік у Google Sheets'}</div>
       </div></td></tr>`;
     return;
   }
@@ -998,9 +1048,14 @@ function renderTable() {
   const grouped = groupEmps(emps, allD);
   let html = '', n = 0;
   for (const [grp, list] of Object.entries(grouped)) {
+    // Перевіряємо чи є хоч якісь дані в цьому відділі за вибраний місяць
+    const deptHasDates = S.data?.departments?.find(d => d.name === (list[0]?._dept ?? grp))?.dates?.length > 0;
+    const noDataNote = allD && !deptHasDates
+      ? ' <span style="font-size:10px;color:var(--muted);font-weight:500;background:var(--bg);padding:2px 7px;border-radius:6px;margin-left:6px">графік не заповнений</span>'
+      : '';
     html += `<tr class="g-header"><td colspan="99">
       ${allD?'🏢':'▸'} ${x(grp)}
-      <span style="color:var(--muted);font-weight:500"> (${list.length})</span>
+      <span style="color:var(--muted);font-weight:500"> (${list.length})</span>${noDataNote}
     </td></tr>`;
     for (const e of list) {
       n++;
@@ -1164,11 +1219,72 @@ function fillPosFilter() {
 // ================================================================
 function renderAll() {
   if (!S.data) return;
+  renderMonthNav();
   fillPosFilter();
   renderTabs();
   renderKPIs();
   renderChart();
   renderTable();
+}
+
+// ================================================================
+// MONTH NAVIGATOR
+// ================================================================
+const UA_MONTHS = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
+                   'Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
+
+function currentYM() {
+  // Повертає "yyyy-MM" для поточного реального місяця
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+}
+
+function viewYM() {
+  // Повертає "yyyy-MM" для місяця що переглядається
+  if (S.viewMonth && S.viewYear)
+    return `${S.viewYear}-${String(S.viewMonth).padStart(2,'0')}`;
+  // null = поточний (server-side)
+  if (S.data) return `${S.data.year}-${String(S.data.month).padStart(2,'0')}`;
+  return currentYM();
+}
+
+function renderMonthNav() {
+  const ym      = viewYM();
+  const cur     = currentYM();
+  const months  = S.availableMonths;
+
+  // Підпис: "Травень 2026"
+  const [y, m]  = ym.split('-').map(Number);
+  document.getElementById('mnLabel').textContent = `${UA_MONTHS[m-1]} ${y}`;
+
+  // Бейдж "Поточний місяць"
+  const badge = document.getElementById('mnBadge');
+  badge.style.display = ym === cur ? '' : 'none';
+
+  // Кнопки — активні якщо є попередній/наступний місяць в availableMonths
+  // Наступний місяць: не далі поточного реального місяця
+  const idx     = months.indexOf(ym);
+  const hasPrev = idx > 0;
+  const hasNext = idx >= 0 && idx < months.length - 1 && months[idx+1] <= cur;
+
+  document.getElementById('mnPrev').disabled = !hasPrev;
+  document.getElementById('mnNext').disabled = !hasNext;
+}
+
+function navMonth(dir) {
+  const ym     = viewYM();
+  const months = S.availableMonths;
+  const idx    = months.indexOf(ym);
+  if (idx < 0) return;
+  const target = months[idx + dir];
+  if (!target) return;
+  const [y, m] = target.split('-').map(Number);
+  S.viewMonth  = m;
+  S.viewYear   = y;
+  // Зупиняємо авто-оновлення на архівних місяцях
+  const isCur  = target === currentYM();
+  if (!isCur && S.timer) { clearInterval(S.timer); S.timer = null; }
+  fetchData().then(() => { if (isCur) startRefreshTimer(); });
 }
 
 // ================================================================
@@ -1183,18 +1299,15 @@ async function fetchData() {
       showErr('⚠️ URL Apps Script не вказано. Відкрий index.html і встав URL у CFG.URL. Зараз показані демо-дані.');
       data = demoData();
     } else {
-      const r = await fetch(PWD.url());
+      const r = await fetch(PWD.url(S.viewMonth, S.viewYear));
       data = await r.json();
-      // Сервер повернув "unauthorized" — пароль невірний або відсутній
-      if (data.error === 'unauthorized') {
-        PWD.clear();
-        showPwdModal();
-        return; // Зупиняємо — покажемо модаль, не рендеримо дані
-      }
+      if (data.error === 'unauthorized') { PWD.clear(); showPwdModal(); return; }
       if (data.error) throw new Error(data.error);
       hideErr();
     }
     S.data = data;
+    // Зберігаємо список доступних місяців з відповіді
+    if (data.availableMonths?.length) S.availableMonths = data.availableMonths;
     const dt = new Date(data.lastUpdated);
     document.getElementById('lastUpdated').textContent =
       `Оновлено: ${dt.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'})}`;
@@ -1337,7 +1450,7 @@ async function submitPassword() {
   try {
     // Тимчасово зберігаємо пароль і перевіряємо запитом до Apps Script
     PWD.save(pwd);
-    const r = await fetch(PWD.url());
+    const r = await fetch(PWD.url(S.viewMonth, S.viewYear));
     const data = await r.json();
 
     if (data.error === 'unauthorized') {
@@ -1379,6 +1492,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
         <td><div class="sk-b sk" style="width:100px"></div></td>
         <td><div class="sk-b sk" style="width:180px"></div></td>
       </tr>`).join('');
+
+  // ── Month navigator events ──
+  document.getElementById('mnPrev').addEventListener('click', () => navMonth(-1));
+  document.getElementById('mnNext').addEventListener('click', () => navMonth(+1));
 
   // ── Password modal events ──
   document.getElementById('pwdBtn').addEventListener('click', submitPassword);
