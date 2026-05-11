@@ -1115,7 +1115,7 @@ function rowWeek(e, dates, td, n, allD) {
     const shortMark = isShortShift(s) ? ' ⚡' : '';
     return `<td><span class="wcell ${wcls}">${x(lbl)}${shortMark}</span></td>`;
   }).join('');
-  const shifts = dates.filter(d=>st(e.schedule?.[d])==='work').length;
+  const shifts = dates.filter(d=>['work','oncall'].includes(st(e.schedule?.[d]))).length;
   return `<tr>
     <td class="n-col">${n}</td>
     <td>
@@ -1152,7 +1152,7 @@ function rowMonth(e, dates, td, n) {
       <span class="${cls}" data-t="${t}" data-short="${shortFlag?'1':'0'}" data-tip="${x(tip)}"></span>
     </td>`;
   }).join('');
-  const shifts = dates.filter(d=>st(e.schedule?.[d])==='work').length;
+  const shifts = dates.filter(d=>['work','oncall'].includes(st(e.schedule?.[d]))).length;
   return `<tr>
     <td class="n-col">${n}</td>
     <td>
